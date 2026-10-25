@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://iruan-architects.vercel.app/sitemap.xml
+Sitemap: https://eruan-architects.vercel.app/sitemap.xml

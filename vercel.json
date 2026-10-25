@@ -1,5 +1,13 @@
 {
   "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "iruan-architects.vercel.app" }],
+      "destination": "https://eruan-architects.vercel.app/$1",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/admin(.*)",
