@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>상담 신청함 | 이루안 건축사사무소</title>
+  <meta name="theme-color" content="#15130F">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <style>
+    :root { --ink:#15130F; --surface:#1D1A15; --line:#3A342B; --paper:#ECE5D8; --muted:#A39B8E; --bronze:#B59876; --bronze-hi:#D6BE9C; }
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--ink); color: var(--paper); font: 400 16px/1.6 "Pretendard Variable", Pretendard, "Malgun Gothic", sans-serif; word-break: keep-all; }
+    :focus-visible { outline: 2px solid var(--bronze-hi); outline-offset: 2px; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 24px; }
+    .btn { min-height: 48px; padding: 0 20px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--paper); font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .btn--solid { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+    input[type=password] { width: 100%; min-height: 52px; padding: 0 16px; background: var(--surface); color: var(--paper); border: 1px solid var(--line); border-radius: 4px; font: inherit; }
+    .login { display: grid; gap: 12px; max-width: 360px; }
+    .msg { min-height: 1.6em; color: #E0A28E; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+    .count { font-size: 2.5rem; font-weight: 300; line-height: 1.1; }
+    .count small { display: block; font-size: 1rem; color: var(--muted); }
+    .list { display: grid; gap: 12px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: grid; gap: 8px; }
+    .card.is-new { border-color: var(--bronze); }
+    .card__head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .card__name { font-weight: 600; font-size: 1.0625rem; }
+    .card__date { color: var(--muted); font-size: .9375rem; white-space: nowrap; }
+    .card__contact { justify-self: start; background: none; border: 0; padding: 4px 0; color: var(--bronze-hi); font: inherit; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+    .card__msg { color: var(--paper); white-space: pre-wrap; }
+    .card__msg:empty { display: none; }
+    .states { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    .states button { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+    .states button[aria-pressed="true"] { background: var(--paper); color: var(--ink); border-color: var(--paper); font-weight: 600; }
+    .empty { color: var(--muted); padding: 32px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>이루안 건축사사무소 상담 신청함</h1>
+
+    <form class="login" id="login">
+      <label for="pw">관리자 비밀번호</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+      <button class="btn btn--solid" type="submit">들어가기</button>
+      <p class="msg" id="login-msg" role="alert"></p>
+    </form>
+
+    <section id="board" hidden>
+      <div class="top">
+        <p class="count"><span id="new-count">0</span><small>새 문의</small></p>
+        <button class="btn" id="reload" type="button">새로고침</button>
+      </div>
+      <p class="msg" id="board-msg" role="status"></p>
+      <div class="list" id="list"></div>
+    </section>
+  </div>
+
+  <script>
+  (function () {
+    var KEY = 'iruan-admin-pw';
+    var STATES = ['새 문의', '연락함', '완료'];
+    var $ = function (id) { return document.getElementById(id); };
+    var get = function () { try { return sessionStorage.getItem(KEY) || ''; } catch (e) { return ''; } };
+    var put = function (v) { try { v ? sessionStorage.setItem(KEY, v) : sessionStorage.removeItem(KEY); } catch (e) {} };
+
+    function call(method, body) {
+      return fetch('/api/admin', {
+        method: method,
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': get() },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) { d.status = r.status; return d; });
+      });
+    }
+
+    function fmt(iso) {
+      var d = new Date(iso);
+      return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+
+    function render(rows) {
+      $('new-count').textContent = rows.filter(function (r) { return r.status === '새 문의'; }).length;
+      var list = $('list');
+      list.textContent = '';
+      if (!rows.length) { list.innerHTML = '<p class="empty">아직 들어온 상담 신청이 없어요.</p>'; return; }
+      rows.forEach(function (r) {
+        var card = document.createElement('article');
+        card.className = 'card' + (r.status === '새 문의' ? ' is-new' : '');
+        card.innerHTML = '<div class="card__head"><span class="card__name"></span><span class="card__date"></span></div>' +
+          '<button class="card__contact" type="button" title="눌러서 복사"></button><p class="card__msg"></p><div class="states"></div>';
+        card.querySelector('.card__name').textContent = r.name;
+        card.querySelector('.card__date').textContent = fmt(r.created_at);
+        var c = card.querySelector('.card__contact');
+        c.textContent = r.contact;
+        c.addEventListener('click', function () {
+          var done = function () { c.textContent = r.contact + ' (복사됨)'; setTimeout(function () { c.textContent = r.contact; }, 1500); };
+          if (navigator.clipboard) navigator.clipboard.writeText(r.contact).then(done, function () { selectText(c); });
+          else selectText(c);
+        });
+        card.querySelector('.card__msg').textContent = r.message || '';
+        var box = card.querySelector('.states');
+        STATES.forEach(function (s) {
+          var b = document.createElement('button');
+          b.type = 'button'; b.textContent = s;
+          b.setAttribute('aria-pressed', String(r.status === s));
+          b.addEventListener('click', function () {
+            if (r.status === s) return;
+            call('PATCH', { id: r.id, status: s }).then(function (d) {
+              if (d.ok) load(); else $('board-msg').textContent = d.error || '바꾸지 못했어요.';
+            });
+          });
+          box.appendChild(b);
+        });
+        list.appendChild(card);
+      });
+    }
+
+    function selectText(el) {
+      var range = document.createRange(); range.selectNodeContents(el);
+      var sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    }
+
+    function load() {
+      $('board-msg').textContent = '';
+      return call('GET').then(function (d) {
+        if (d.status === 401) { put(''); showLogin('비밀번호가 맞지 않아요.'); return; }
+        if (!d.rows) { showBoard(); $('board-msg').textContent = d.error || '불러오지 못했어요.'; return; }
+        showBoard(); render(d.rows);
+      }).catch(function () { showBoard(); $('board-msg').textContent = '불러오지 못했어요. 인터넷 연결을 확인해 주세요.'; });
+    }
+
+    function showLogin(msg) {
+      $('board').hidden = true; $('login').hidden = false;
+      $('login-msg').textContent = msg || '';
+      $('pw').value = ''; $('pw').focus();
+    }
+    function showBoard() { $('login').hidden = true; $('board').hidden = false; }
+
+    $('login').addEventListener('submit', function (e) {
+      e.preventDefault();
+      put($('pw').value);
+      load();
+    });
+    $('reload').addEventListener('click', load);
+
+    if (get()) load(); else showLogin();
+  })();
+  </script>
+</body>
+</html>
