@@ -37,6 +37,14 @@
     .states button { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
     .states button[aria-pressed="true"] { background: var(--paper); color: var(--ink); border-color: var(--paper); font-weight: 600; }
     .empty { color: var(--muted); padding: 32px 0; }
+    .pw { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 20px; }
+    .pw summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+    .pw__form { display: grid; gap: 14px; max-width: 360px; margin-top: 12px; }
+    .pw__form label { display: grid; gap: 6px; color: var(--muted); font-size: .9375rem; }
+    .pw__msg { min-height: 1.6em; }
+    .pw__msg.is-ok { color: var(--bronze-hi); }
+    .pw__msg.is-error { color: #E0A28E; }
+    .pw__note { color: var(--muted); font-size: .875rem; }
   </style>
 </head>
 <body>
@@ -57,6 +65,18 @@
       </div>
       <p class="msg" id="board-msg" role="status"></p>
       <div class="list" id="list"></div>
+
+      <details class="pw">
+        <summary>비밀번호 바꾸기</summary>
+        <form id="pw-form" class="pw__form" novalidate>
+          <label>지금 비밀번호<input name="current" type="password" autocomplete="current-password" required></label>
+          <label>새 비밀번호 (10자 이상)<input name="next" type="password" autocomplete="new-password" minlength="10" maxlength="100" required></label>
+          <label>새 비밀번호 한 번 더<input name="again" type="password" autocomplete="new-password" required></label>
+          <button class="btn btn--solid" type="submit">비밀번호 바꾸기</button>
+          <p class="pw__msg" id="pw-msg" role="status"></p>
+          <p class="pw__note">새 비밀번호를 잊어버리면, 처음 받은 비상용 비밀번호(Vercel의 ADMIN_PASSWORD)로 들어와서 다시 정할 수 있어요.</p>
+        </form>
+      </details>
     </section>
   </div>
 
@@ -71,7 +91,7 @@
     function call(method, body) {
       return fetch('/api/admin', {
         method: method,
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': get() },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': encodeURIComponent(get()) },
         body: body ? JSON.stringify(body) : undefined
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) { d.status = r.status; return d; });
@@ -147,6 +167,24 @@
       load();
     });
     $('reload').addEventListener('click', load);
+
+    $('pw-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = e.target, msg = $('pw-msg');
+      var say = function (t, ok) { msg.textContent = t; msg.className = 'pw__msg ' + (ok ? 'is-ok' : 'is-error'); };
+      var cur = f.elements.current.value, next = f.elements.next.value, again = f.elements.again.value;
+      if (!cur) { f.elements.current.focus(); return say('지금 비밀번호를 적어 주세요.'); }
+      if (next.length < 10) { f.elements.next.focus(); return say('새 비밀번호는 10자 이상으로 정해 주세요.'); }
+      if (next !== again) { f.elements.again.focus(); return say('새 비밀번호 두 칸이 서로 달라요.'); }
+      say('바꾸는 중이에요…', true);
+      call('POST', { action: 'change-password', current: cur, next: next }).then(function (d) {
+        if (d.status === 401) { put(''); showLogin('다시 들어와 주세요.'); return; }
+        if (!d.ok) return say(d.error || '비밀번호를 바꾸지 못했어요.');
+        put(next);
+        f.reset();
+        say('비밀번호를 바꿨어요. 다음부터 새 비밀번호로 들어오세요.', true);
+      }).catch(function () { say('바꾸지 못했어요. 인터넷 연결을 확인해 주세요.'); });
+    });
 
     if (get()) load(); else showLogin();
   })();
